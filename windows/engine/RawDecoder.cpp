@@ -453,14 +453,15 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
     // Apple's profile for the camera, where one was measured. Its crop is
     // that of the mode it was measured in: only for a mosaic of that size
     const AppleProfile *profile = nullptr;
-    if (!options.cameraRGB && !options.appleColour.empty())
+    const bool linear = !m.linearRGB.empty();
+    if (!linear && !options.cameraRGB && !options.appleColour.empty())
         profile = AppleColour::table(options.appleColour).find(m.make, m.model);
     result.profiled = profile != nullptr;
     {
         std::string extension = path.size() > 4 ? path.substr(path.size() - 4) : std::string();
         for (char &ch : extension)
             ch = char(std::tolower(static_cast<unsigned char>(ch)));
-        result.dng = extension == ".dng";
+        result.dng = linear || extension == ".dng";
         // The exposure Apple gives this file: a DNG's own; else its camera's,
         // or the one Apple gives the file's ISO where that differs (the D700
         // at ISO 100, the Z f at 90): the profile's own is in its transforms,
@@ -481,24 +482,12 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
     const int top = options.cropHeight ? options.cropTop : crop ? crop[1] : m.cropTop;
     const int w = options.cropWidth ? options.cropWidth : crop ? crop[2] : m.cropWidth;
     const int h = options.cropHeight ? options.cropHeight : crop ? crop[3] : m.cropHeight;
-    if (left < 0 || top < 0 || left + w > m.width || top + h > m.height)
+    if (left < 0 || top < 0 || w <= 0 || h <= 0 || left > m.width - w || top > m.height - h)
         throw std::runtime_error(path + ": the crop lies outside the mosaic");
     result.cropLeft = left;
     result.cropTop = top;
     result.cropWidth = w;
     result.cropHeight = h;
-    // the pattern from the image area's corner, with all three colours
-    const int n = m.cfaSize;
-    bool colours[3] = {};
-    for (int y = 0; y < n; ++y)
-        for (int x = 0; x < n; ++x)
-            colours[std::clamp(m.cfa[y][x], 0, 2)] = true;
-    if (!colours[0] || !colours[1] || !colours[2])
-        throw std::runtime_error(path + ": the colour filter pattern lacks a colour (" + m.decoder + " misreads it)");
-    int cfa[6][6] = {};
-    for (int y = 0; y < n; ++y)
-        for (int x = 0; x < n; ++x)
-            cfa[y][x] = m.cfa[(top + y) % n][(left + x) % n];
 
     // The white balance: the camera's neutral under the light, the RGB a
     // neutral surface gives, which the balance takes to equal channels.
@@ -570,25 +559,43 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
     result.whiteBalance = {neutral.y / neutral.x, 1, neutral.y / neutral.z};
 
     // black and white, the balance, into float
-    std::vector<float> &mosaic = plan.mosaic;
-    mosaic.resize(size_t(w) * h);
-    const float range = 1 / (m.white - m.black[0][0]);
-    parallelRows(h, [&](int begin, int end) {
-        for (int y = begin; y < end; ++y)
-            for (int x = 0; x < w; ++x) {
-                const int mx = left + x, my = top + y;
-                const float v = (float(m.data[size_t(my) * m.width + mx]) - m.black[my & 1][mx & 1]) * range;
-                mosaic[size_t(y) * w + x] = v * result.whiteBalance[cfa[y % n][x % n]];
-            }
-    });
-    result.mosaic = m;
-    result.mosaic.data.clear();
-    m.data.clear();
-    m.data.shrink_to_fit();
+    if (linear) {
+        plan.linearRGB = std::move(m.linearRGB);
+        if (w != m.width || top != 0) {
+            for (int y = 0; y < h; ++y)
+                std::memmove(plan.linearRGB.data() + size_t(y) * w,
+                             plan.linearRGB.data() + size_t(top + y) * m.width + left, size_t(w) * sizeof(float3));
+        }
+        plan.linearRGB.resize(size_t(w) * h);
+    } else {
+        // the pattern from the image area's corner, with all three colours
+        const int n = m.cfaSize;
+        bool colours[3] = {};
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+                colours[std::clamp(m.cfa[y][x], 0, 2)] = true;
+        if (!colours[0] || !colours[1] || !colours[2])
+            throw std::runtime_error(path + ": the colour filter pattern lacks a colour (" + m.decoder + " misreads it)");
+        plan.cfaSize = n;
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+                plan.cfa[y][x] = m.cfa[(top + y) % n][(left + x) % n];
+
+        std::vector<float> &mosaic = plan.mosaic;
+        mosaic.resize(size_t(w) * h);
+        const float range = 1 / (m.white - m.black[0][0]);
+        parallelRows(h, [&](int begin, int end) {
+            for (int y = begin; y < end; ++y)
+                for (int x = 0; x < w; ++x) {
+                    const int mx = left + x, my = top + y;
+                    const float v = (float(m.data[size_t(my) * m.width + mx]) - m.black[my & 1][mx & 1]) * range;
+                    mosaic[size_t(y) * w + x] = v * result.whiteBalance[plan.cfa[y % n][x % n]];
+                }
+        });
+        m.data = std::vector<uint16_t>();
+    }
     plan.width = w;
     plan.height = h;
-    plan.cfaSize = n;
-    std::memcpy(plan.cfa, cfa, sizeof cfa);
     plan.lightNeutral = lightNeutral;
 
     // white-balanced camera RGB -> Rec.2020: Apple's transform, the balance
@@ -607,7 +614,7 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
                                   : std::exp2(result.baselineExposure);
 
     // the lens's distortion, in the sensor's frame, about the image area's centre
-    if (options.lensCorrection && !options.cameraRGB) {
+    if (!linear && options.lensCorrection && !options.cameraRGB) {
         const LensInfo lens{m.make, m.model, m.lensMaker, m.lensModel, m.focalLength, m.cropFactor, m.width, m.height,
                             left, top};
         result.distortion = distortionFor(path, lens, w, h, options.lensfunDir, options.cameraLensData);
@@ -626,6 +633,7 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
         plan.outWidth = int(std::floor(plan.turnedWidth * plan.scale));
         plan.outHeight = int(std::floor(plan.turnedHeight * plan.scale));
     }
+    result.mosaic = std::move(m);
     return plan;
 }
 
@@ -635,14 +643,17 @@ DecodedPicture decodePlan(DecodePlan &&plan)
     const DecodeOptions &options = plan.options;
     const int w = plan.width, h = plan.height, n = plan.cfaSize;
     std::vector<float3> rgb;
-    if (n == 2) {
+    const bool linear = !plan.linearRGB.empty();
+    if (linear) {
+        rgb = std::move(plan.linearRGB);
+    } else if (n == 2) {
         const int bayer[2][2] = {{plan.cfa[0][0], plan.cfa[0][1]}, {plan.cfa[1][0], plan.cfa[1][1]}};
         demosaicMHC(plan.mosaic, w, h, bayer, rgb);
     } else {
         demosaicPattern(plan.mosaic, w, h, plan.cfa, n, rgb);
     }
     plan.mosaic = std::vector<float>();
-    if (!options.cameraRGB)
+    if (!linear && !options.cameraRGB)
         reconstructHighlights(rgb, w, h, result.whiteBalance, plan.lightNeutral);
     const Mat3 toRec2020 = plan.toRec2020;
     const float gain = plan.gain;
@@ -650,6 +661,8 @@ DecodedPicture decodePlan(DecodePlan &&plan)
         for (int y = begin; y < end; ++y)
             for (int x = 0; x < w; ++x) {
                 float3 &p = rgb[size_t(y) * w + x];
+                if (linear)
+                    p *= result.whiteBalance;
                 p = toRec2020 * p * gain;
             }
     });
@@ -657,7 +670,7 @@ DecodedPicture decodePlan(DecodePlan &&plan)
     // the detail steps, on the demosaic's grid before the lens's warp, with
     // the noise measured once, here
     const bool repair = options.falseColour || options.colourNoiseReduction;
-    if (!options.cameraRGB && (repair || options.sharpening)) {
+    if (!linear && !options.cameraRGB && (repair || options.sharpening)) {
         const PictureNoise noise = measureNoise(rgb, w, h);
         result.noise[0] = noise.full.a;
         result.noise[1] = noise.full.b;

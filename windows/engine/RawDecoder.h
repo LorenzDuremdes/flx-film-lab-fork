@@ -78,6 +78,7 @@ struct DecodePlan {
     DecodedPicture result;          // all but the pixels
     DecodeOptions options;
     std::vector<float> mosaic;      // width x height
+    std::vector<float3> linearRGB;  // already demosaiced, cropped camera RGB for CPU colour conversion
     int width = 0, height = 0;      // of the image area
     int cfaSize = 2;
     int cfa[6][6] = {};             // from the image area's corner

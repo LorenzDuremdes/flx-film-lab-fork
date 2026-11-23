@@ -1,3 +1,7 @@
+# FLX Film Lab – Windows DNG fork
+
+Based on FLX Film Lab 2.1.0. The Windows stills importer reads three-channel linear DNGs, including DxO PureRAW lossless JPEG and High-Fidelity JPEG XL. Open a DNG directly in Stills.
+
 <img src="docs/images/icon.png" width="128" alt="The FLX Film Lab icon">
 
 # FLX Film Lab
@@ -1523,7 +1527,7 @@ FLXFilmLab/
     Resources/ motion.metal (compiled ahead, or at launch)
 profiles/      film profiles this repo builds from datasheets
 tools/bake/    Python: datasheet extraction, packs, parity references
-tools/icon/    the app icon's builder, .icns and .icon (the icon is all rights reserved)
+tools/icon/    the app icon builders, .icns and .icon
 tools/render/  headless CLI renderer
 tools/lut/     flxlut: a look as a .cube for each log format the Motion mode reads
 windows/       FLX Film Lab for Windows (windows/README.md)
@@ -1543,8 +1547,7 @@ docs/          profiles.md how each profile is built, building-profiles.md the r
 
 The code is GPLv3, as spektrafilm's is (`LICENSE`). The film and paper data,
 `FLXFilmLab/Resources/packs/` and `profiles/`, is CC BY-SA 4.0, as spektrafilm's
-profiles are. The app icon is © Felix Jablonka, all rights reserved: neither
-licence covers it, so a fork needs its own. `NOTICE.md` lists everything this
+profiles are. This fork's exposure-step icon is GPLv3. `NOTICE.md` lists everything this
 builds on.
 
 Film, paper, filter, camera and format names (Kodak, Fujifilm, Agfa, Ilford,
