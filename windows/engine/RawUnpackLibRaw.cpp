@@ -120,6 +120,7 @@ RawMosaic unpackLinearDng(const std::string &path, const libraw_data_t &d, bool 
         m.cropWidth = crop.cwidth;
         m.cropHeight = crop.cheight;
     }
+    m.cfaSize = 0;
     m.xyzToCamera = linearDngMatrix(d.color);
     const float *wb = d.color.cam_mul;
     if (wb[0] > 0 && wb[1] > 0 && wb[2] > 0)

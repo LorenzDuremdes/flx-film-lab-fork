@@ -2,12 +2,7 @@
 ; builds it from dist\FLX Film Lab once the app is installed there:
 ;   ISCC /DAppVersion=2.1.0 tools\pc\installer.iss
 ;
-; It installs for the person running it, with no administrator rights, in
-; their own Programs folder, or for everyone if they choose that in its
-; first dialog. It puts the app in the Start menu, and in Explorer's
-; "Open with" for RAW files, JPEG, TIFF and movies, without taking any of
-; them over: what a file opens with by default stays as it was. Uninstalling
-; takes all of that away again; the app's settings stay.
+; The DNG build has its own install directory and Start menu shortcut.
 
 #ifndef AppVersion
   #define AppVersion "2.1.0"
