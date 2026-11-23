@@ -164,7 +164,7 @@ jobs:
           $env:PATH = "C:\Qt\6.12.0\msvc2022_64\bin;$env:PATH"
           python -m pip install numpy tifffile imagecodecs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          python windows/tools/compare/linear_dng.py windows/build/win/flxport-decode.exe
+          python windows/tools/compare/linear_dng.py windows/build/win/flxport-decode.exe --app "windows/dist/FLX Film Lab/FLXFilmLab.exe"
 
       - name: Checksum
         shell: pwsh

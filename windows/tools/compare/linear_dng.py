@@ -1,9 +1,9 @@
 """Run with python linear_dng.py path/to/flxport-decode (numpy, tifffile, imagecodecs)."""
+import argparse
 import json
 from pathlib import Path
 import struct
 import subprocess
-import sys
 from tempfile import TemporaryDirectory
 
 import numpy as np
@@ -21,7 +21,7 @@ def render(decoder, source, output, *options):
     return pixels[:, :, :3]
 
 
-def check(decoder, folder):
+def check(decoder, folder, app):
     # Rec.2020 primaries make the expected scene-linear RGB known independently.
     matrix = (1.716651, -.355671, -.253366, -.666684, 1.616481, .015769, .017640, -.042771, .942103)
     tags = [
@@ -52,7 +52,20 @@ def check(decoder, folder):
         preview = render(decoder, source, output, "--size", "44")
         assert preview.shape == (44, 28, 3) and np.isfinite(preview).all()
 
+        if app:
+            print_path = source.with_suffix(".tif")
+            subprocess.run([app, source, "--export", print_path], check=True, timeout=180)
+            with tifffile.TiffFile(print_path) as result:
+                page = result.pages[0]
+                assert (page.imagewidth, page.imagelength) == (56, 88)
+                assert page.bitspersample == 16 and page.samplesperpixel >= 3
+                assert np.ptp(page.asarray()[:, :, :3]) > 0
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("decoder", type=Path)
+    parser.add_argument("--app", type=Path, help="also export each fixture through FLX Stills")
+    args = parser.parse_args()
     with TemporaryDirectory() as tmp:
-        check(Path(sys.argv[1]).resolve(), Path(tmp))
+        check(args.decoder.resolve(), Path(tmp), args.app.resolve() if args.app else None)

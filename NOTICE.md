@@ -507,6 +507,8 @@ which the installer puts beside the app in `licenses/`:
   which unpack the RAW files, and **pugixml**, MIT, which reads RawSpeed's
   camera list: the submodules in `windows/third_party`, at the commits the
   port is built from.
+- **libjxl 0.11.2** decodes the JPEG XL tiles in High-Fidelity DNGs. The
+  installer includes the JPEG XL, Highway, Brotli and Little CMS licences.
 - **Lensfun's lens database**, CC BY-SA 3.0, for lens correction where a
   camera's own file gives none. The port reads it with its own code, not
   Lensfun's library.
