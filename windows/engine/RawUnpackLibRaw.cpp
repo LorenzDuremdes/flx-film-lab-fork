@@ -101,6 +101,26 @@ Mat3 linearDngMatrix(const libraw_colordata_t &colour)
     throw std::runtime_error("The linear DNG has no usable embedded colour matrix.");
 }
 
+// PureRAW 6 X-H2 exports with this daylight calibration retain the RAF's
+// black-subtracted, white-normalized channels. The native FLX transform
+// already characterizes those channels. Other linear DNGs can store RGB
+// in a different basis, even when they name the same camera.
+bool usesNativeXH2RGB(const libraw_data_t &d, const Mat3 &daylight)
+{
+    const std::string software = d.idata.software;
+    if (d.idata.maker_index != LIBRAW_CAMERAMAKER_Fujifilm || std::string(d.idata.model) != "X-H2"
+        || (software != "DxO PureRAW 6" && software.rfind("DxO PureRAW 6.", 0) != 0))
+        return false;
+    const Mat3 camera = Mat3::rows({1.1809f, -.5358f, -.1141f}, {-.4248f, 1.2164f, .2343f},
+                                   {-.0514f, .1097f, .5848f});
+    const Mat3 calibrated = Mat3::diagonal({.9375f, 1, 1.0122f}) * camera;
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c)
+            if (std::abs(daylight.at(r, c) - calibrated.at(r, c)) > .0001f)
+                return false;
+    return true;
+}
+
 RawMosaic unpackLinearDng(const std::string &path, const libraw_data_t &d, bool jpegXL)
 {
     RawMosaic m;
@@ -122,6 +142,7 @@ RawMosaic unpackLinearDng(const std::string &path, const libraw_data_t &d, bool 
     }
     m.cfaSize = 0;
     m.xyzToCamera = linearDngMatrix(d.color);
+    m.nativeCameraRGB = usesNativeXH2RGB(d, m.xyzToCamera);
     const float *wb = d.color.cam_mul;
     if (wb[0] > 0 && wb[1] > 0 && wb[2] > 0)
         m.asShotNeutral = {wb[1] / wb[0], 1, wb[1] / wb[2]};

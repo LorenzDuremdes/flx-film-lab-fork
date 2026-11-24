@@ -10,12 +10,12 @@ import numpy as np
 import tifffile
 
 
-def render(decoder, source, output, *options):
-    subprocess.run([decoder, source, output, "--white-balance", "as-shot", *options], check=True)
+def render(decoder, source, output, *options, profiled=False, wb="as-shot"):
+    subprocess.run([decoder, source, output, "--white-balance", wb, *options], check=True)
     metadata = json.loads(output.with_suffix(".json").read_text())
     magic, version, w, h, channels, dtype, _, _ = struct.unpack("<4s7I", output.read_bytes()[:32])
     assert (magic, version, channels, dtype) == (b"FLXD", 1, 4, 0)
-    assert metadata["linearDng"] and not metadata["profiled"]
+    assert metadata["linearDng"] and metadata["profiled"] == profiled
     pixels = np.fromfile(output, "<f4", offset=32).reshape(h, w, 4)
     assert np.all(pixels[:, :, 3] == 1)
     return pixels[:, :, :3]
@@ -62,6 +62,37 @@ def check(decoder, folder, app):
                 assert np.ptp(page.asarray()[:, :, :3]) > 0
 
 
+def check_xh2(decoder, folder):
+    # The same normalized camera RGB should enter the film at the same
+    # exposure and D55 transform as the RAF, even with a +2 EV DNG baseline.
+    matrix = (11809, -5358, -1141, -4248, 12164, 2343, -514, 1097, 5848)
+    calibration = (9375, 0, 0, 0, 10000, 0, 0, 0, 10122)
+    def rationals(values):
+        return tuple(k for v in values for k in (v, 10000))
+
+    tags = [
+        (271, "s", 0, "FUJIFILM"), (272, "s", 0, "X-H2"),
+        (50706, "B", 4, (1, 4, 0, 0)), (50708, "s", 0, "Fujifilm X-H2"),
+        (50778, "H", 1, 21), (50723, "2i", 9, rationals(calibration)),
+        (50730, "2i", 1, (202, 100)), (50717, "I", 3, (65535,) * 3),
+    ]
+    codes = np.full((64, 96, 3), (5300, 8700, 6200), dtype=np.uint16)
+    profiles = json.loads((decoder.parent / "apple-colour.json").read_text(encoding="utf8"))
+    d55 = np.array(profiles["cameras"]["Fujifilm|X-H2"]["fixed"]["D55"]["transform"])
+    for software, colour, native in [
+        ("DxO PureRAW 6", matrix, True),
+        ("Another converter", matrix, False),
+        ("DxO PureRAW 6", (10000, 0, 0, 0, 10000, 0, 0, 0, 10000), False),
+    ]:
+        source = folder / "xh2.dng"
+        tifffile.imwrite(source, codes, photometric=34892, planarconfig="contig", metadata=None,
+                         software=software, extratags=tags + [(50721, "2i", 9, rationals(colour))])
+        pixels = render(decoder, source, source.with_suffix(".f32"), profiled=native, wb="film")
+        assert pixels.shape == codes.shape
+        if native:
+            np.testing.assert_allclose(pixels, (codes / 65535) @ d55.T, atol=1e-6, rtol=0)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("decoder", type=Path)
@@ -69,3 +100,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     with TemporaryDirectory() as tmp:
         check(args.decoder.resolve(), Path(tmp), args.app.resolve() if args.app else None)
+        check_xh2(args.decoder.resolve(), Path(tmp))

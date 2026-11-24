@@ -454,7 +454,7 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
     // that of the mode it was measured in: only for a mosaic of that size
     const AppleProfile *profile = nullptr;
     const bool linear = !m.linearRGB.empty();
-    if (!linear && !options.cameraRGB && !options.appleColour.empty())
+    if ((!linear || m.nativeCameraRGB) && !options.cameraRGB && !options.appleColour.empty())
         profile = AppleColour::table(options.appleColour).find(m.make, m.model);
     result.profiled = profile != nullptr;
     {
@@ -467,7 +467,10 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
         // at ISO 100, the Z f at 90): the profile's own is in its transforms,
         // and the gain below adds the difference. Without a profile, the
         // options' where they name one.
-        const bool dngOwn = result.dng && !std::isnan(m.exposure.dngBaselineExposure);
+        // PureRAW's native X-H2 samples have the RAF's range. Feed the film
+        // the same camera exposure as the RAF (including the ISO setting).
+        const bool nativeLinear = profile && m.nativeCameraRGB;
+        const bool dngOwn = result.dng && !nativeLinear && !std::isnan(m.exposure.dngBaselineExposure);
         const float apple = dngOwn ? m.exposure.dngBaselineExposure
                             : profile ? profile->exposureAt(m.exposure.iso)
                                       : 0.0f;
@@ -477,7 +480,7 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
 
     // the image area: as given, else Apple's crop for the camera's mode,
     // else the decoder's
-    const int *crop = profile ? profile->cropFor(m.width, m.height) : nullptr;
+    const int *crop = profile && !linear ? profile->cropFor(m.width, m.height) : nullptr;
     const int left = options.cropWidth ? options.cropLeft : crop ? crop[0] : m.cropLeft;
     const int top = options.cropHeight ? options.cropTop : crop ? crop[1] : m.cropTop;
     const int w = options.cropWidth ? options.cropWidth : crop ? crop[2] : m.cropWidth;
@@ -533,7 +536,7 @@ DecodePlan planDecode(const std::string &path, const DecodeOptions &options)
         // another decoder reads the mode its colour was measured in, with
         // another white (RawSpeed's measured one, LibRaw's bit depth), the
         // raw is put over that range. Another mode has its own range already.
-        if (m.decoder != profile->decoder && m.width == profile->mosaicWidth && m.height == profile->mosaicHeight) {
+        if (!linear && m.decoder != profile->decoder && m.width == profile->mosaicWidth && m.height == profile->mosaicHeight) {
             const float levels = (m.white - m.black[0][0]) / (profile->white - profile->black);
             for (float3 &column : apple.c)
                 column *= levels;

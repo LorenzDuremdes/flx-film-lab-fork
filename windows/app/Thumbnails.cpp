@@ -245,10 +245,13 @@ QImage ThumbnailStore::shown(const QString &path) const
 
 QString ThumbnailStore::printKey(const QString &path, const Look &edits)
 {
-    return keyFor(path, QJsonObject{{"recipe", recipeToJson(edits.recipe)},
-                                    {"whiteBalance", whiteBalanceName(edits.whiteBalance)},
-                                    {"customTemperature", edits.customTemperature},
-                                    {"customTint", edits.customTint}});
+    QJsonObject settings{{"recipe", recipeToJson(edits.recipe)},
+                         {"whiteBalance", whiteBalanceName(edits.whiteBalance)},
+                         {"customTemperature", edits.customTemperature},
+                         {"customTint", edits.customTint}};
+    if (path.endsWith(QStringLiteral(".dng"), Qt::CaseInsensitive))
+        settings.insert(QStringLiteral("dngDecodeVersion"), 2);
+    return keyFor(path, settings);
 }
 
 QString ThumbnailStore::printKey(const QString &path, const MotionLook &grade)
