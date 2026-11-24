@@ -1,5 +1,14 @@
 # Changelog
 
+## Windows DNG fork (2026-11-24)
+
+- **DxO PureRAW 6 import.** Open three-channel linear DNGs directly in Stills
+  on Windows, including uncompressed files, lossless JPEG and High-Fidelity
+  JPEG XL exports.
+- **Fujifilm X-H2 colour and exposure.** For PureRAW 6 DNGs with the supported
+  X-H2 colour calibration, FLX uses the same camera profile and base exposure
+  as it does for the original RAF before applying the film and paper simulation.
+
 ## 2.1.0 (2026-11-18)
 
 Version 2.1 adds a default film and paper, a choice of export size and a
