@@ -248,6 +248,11 @@ void GpuDecoder::boxMean(QRhiTexture *from, QRhiTexture *to, QRhiTexture *scratc
 
 DecodedPicture GpuDecoder::decode(DecodePlan &&plan, double *seconds)
 {
+    if (!plan.linearRGB.empty()) {
+        if (seconds)
+            *seconds = 0;
+        return decodePlan(std::move(plan));
+    }
     // whatever a decode that failed left
     m_passes.clear();
     m_uniforms.clear();

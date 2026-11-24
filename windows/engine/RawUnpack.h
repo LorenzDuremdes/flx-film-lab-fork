@@ -17,6 +17,8 @@ struct RawMosaic {
     std::string make, model;
     int width = 0, height = 0;      // the mosaic, as unpacked
     std::vector<uint16_t> data;     // width x height raw values
+    std::vector<float3> linearRGB;  // linear DNG camera samples, black subtracted and white normalized
+    bool nativeCameraRGB = false;   // linear samples verified to use the native profile's channels and range
     // The colour filter pattern from the mosaic's origin, 0 R 1 G 2 B,
     // [row][column]: Bayer's 2x2 or X-Trans's 6x6, cfaSize on a side.
     int cfaSize = 2;

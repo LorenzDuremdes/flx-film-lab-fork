@@ -1,6 +1,9 @@
 #include "RawUnpack.h"
 
 #include "RawSpeed-API.h"
+#include "tiff/TiffIFD.h"
+#include "tiff/TiffEntry.h"
+#include "tiff/TiffTag.h"
 
 #include <algorithm>
 #include <map>
@@ -48,6 +51,18 @@ RawMosaic unpackWithRawSpeed(const std::string &path, const std::string &cameras
         // only cameras RawSpeed's list knows; the rest go to LibRaw
         decoder->failOnUnknown = true;
         decoder->checkSupport(&cameras);
+        // Leave linear DNGs to the RGB importer before decompressing the
+        // whole picture here. A full-size JPEG preview is a different IFD.
+        const auto *root = decoder->getRootIFD();
+        if (root && root->hasEntryRecursive(TiffTag::DNGVERSION)) {
+            for (const auto *ifd : root->getIFDsWithTag(TiffTag::PHOTOMETRICINTERPRETATION)) {
+                if (ifd->getEntry(TiffTag::PHOTOMETRICINTERPRETATION)->getU32() == 34892
+                    && ifd->hasEntry(TiffTag::SAMPLESPERPIXEL)
+                    && ifd->getEntry(TiffTag::SAMPLESPERPIXEL)->getU32() == 3
+                    && (!ifd->hasEntry(TiffTag::NEWSUBFILETYPE) || ifd->getEntry(TiffTag::NEWSUBFILETYPE)->getU32() == 0))
+                    fail(path, "linear RGB DNG");
+            }
+        }
         decoder->decodeRaw();
         decoder->decodeMetaData(&cameras);
         const RawImage raw = decoder->mRaw;

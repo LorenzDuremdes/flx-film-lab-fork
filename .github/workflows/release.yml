@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   mac:
+    if: github.ref_name != 'windows-pureraw-dng'
     # macOS 26 and its Xcode 26, the SDK the app is developed and tested
     # with: SwiftUI behaves as the SDK an app is built with, and 1.1.0, built
     # on macOS 15 with its SDK, lost the sliders' double-click reset. Named,
@@ -58,12 +59,34 @@ jobs:
     # The Windows app's own LGPL FFmpeg, cross-compiled with mingw-w64 as on
     # the developer's Mac (windows/tools/ffmpeg/build.sh, which pins and
     # checks every source and writes how it was built beside the DLLs).
-    runs-on: macos-26
+    runs-on: ${{ github.ref_name == 'windows-pureraw-dng' && 'ubuntu-latest' || 'macos-26' }}
     steps:
       - uses: actions/checkout@v5
-      - name: Install mingw-w64, nasm and pkg-config
-        run: brew install mingw-w64 nasm pkgconf
+      - name: Reuse the upstream 2.1.0 FFmpeg build for the DNG preview
+        if: github.ref_name == 'windows-pureraw-dng'
+        id: reuse
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive="$RUNNER_TEMP/ffmpeg.zip"
+          if gh api repos/felixjablonka/flx-film-lab/actions/artifacts/14432960615/zip > "$archive" &&
+             echo "efe0632a35c5f577acaa9e085312af4c2de20ce06c85db335764169d83787323  $archive" | sha256sum --check; then
+            mkdir -p windows/build/ffmpeg
+            unzip -q "$archive" -d windows/build/ffmpeg
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install FFmpeg build tools
+        if: steps.reuse.outputs.available != 'true'
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update && sudo apt-get install -y mingw-w64 nasm pkg-config
+          else
+            brew install mingw-w64 nasm pkgconf
+          fi
       - name: Build FFmpeg
+        if: steps.reuse.outputs.available != 'true'
         run: |
           if ! windows/tools/ffmpeg/build.sh > ffmpeg.log 2>&1; then
             cat ffmpeg.log
@@ -133,6 +156,15 @@ jobs:
               exit 1
             }
           }
+
+      - name: Test Windows linear DNG imports at full and preview size
+        if: github.ref_name == 'windows-pureraw-dng'
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Qt\6.12.0\msvc2022_64\bin;$env:PATH"
+          python -m pip install numpy tifffile imagecodecs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python windows/tools/compare/linear_dng.py windows/build/win/flxport-decode.exe --app "windows/dist/FLX Film Lab/FLXFilmLab.exe"
 
       - name: Checksum
         shell: pwsh

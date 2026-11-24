@@ -149,7 +149,10 @@ int main(int argc, char **argv)
                     std::printf("%s %s, %s: mosaic %d x %d, image %d x %d at (%d, %d), orientation %d\n",
                                 m.make.c_str(), m.model.c_str(), m.decoder.c_str(), m.width, m.height, m.cropWidth,
                                 m.cropHeight, m.cropLeft, m.cropTop, m.orientation);
-                    std::printf("  pattern %d%d%d%d, black %.0f %.0f %.0f %.0f, white %.0f, as shot R %.4f B %.4f\n",
+                    if (!m.linearRGB.empty())
+                        std::printf("  three-channel linear DNG\n");
+                    else
+                        std::printf("  pattern %d%d%d%d, black %.0f %.0f %.0f %.0f, white %.0f, as shot R %.4f B %.4f\n",
                                 m.cfa[0][0], m.cfa[0][1], m.cfa[1][0], m.cfa[1][1], m.black[0][0], m.black[0][1],
                                 m.black[1][0], m.black[1][1], m.white, m.asShotNeutral.x, m.asShotNeutral.z);
                     std::printf("  ISO %.0f, Fujifilm raw exposure shift %.2f, dynamic range %d, Canon HTP %d, DNG "
@@ -249,7 +252,8 @@ int main(int argc, char **argv)
             {"decoder", QString::fromStdString(m.decoder)}, {"width", d.pixels.width}, {"height", d.pixels.height},
             {"mosaicWidth", m.width}, {"mosaicHeight", m.height}, {"orientation", m.orientation},
             {"upright", options.upright}, {"cameraRGB", options.cameraRGB}, {"profiled", d.profiled},
-            {"gpu", gpu ? QJsonValue(QString::fromStdString(backend)) : QJsonValue(false)},
+            {"linearDng", m.cfaSize == 0},
+            {"gpu", (gpu && m.cfaSize != 0) ? QJsonValue(QString::fromStdString(backend)) : QJsonValue(false)},
             {"noise", QJsonArray{d.noise[0], d.noise[1], d.noise[2], d.noise[3]}},
             {"temperature", d.temperature}, {"tint", d.tint},
             {"decoderCrop", QJsonArray{m.cropLeft, m.cropTop, m.cropWidth, m.cropHeight}},

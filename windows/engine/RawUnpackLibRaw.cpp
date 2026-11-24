@@ -1,4 +1,5 @@
 #include "RawUnpack.h"
+#include "LinearDngJxl.h"
 
 #include <libraw/libraw.h>
 
@@ -25,9 +26,8 @@ int exifOrientation(int flip)
     }
 }
 
-void readMetadata(const LibRaw &raw, RawMosaic &m)
+void readMetadata(const libraw_data_t &d, RawMosaic &m)
 {
-    const libraw_data_t &d = raw.imgdata;
     m.orientation = exifOrientation(d.sizes.flip);
     m.exposure.iso = d.other.iso_speed;
     if (std::string(d.idata.make).rfind("Fuji", 0) == 0) {
@@ -76,13 +76,113 @@ void readMetadata(const LibRaw &raw, RawMosaic &m)
     }
 }
 
+// The DNG's colour space can differ from the original camera's. Use its
+// embedded daylight matrix, including camera calibration and AnalogBalance.
+Mat3 linearDngMatrix(const libraw_colordata_t &colour)
+{
+    for (int light : {int(LIBRAW_WBI_D65), -1}) {
+        for (const auto &profile : colour.dng_color) {
+            if (light >= 0 && profile.illuminant != light)
+                continue;
+            Mat3 matrix{}, calibration{};
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j) {
+                    matrix.at(i, j) = profile.colormatrix[i][j];
+                    calibration.at(i, j) = profile.calibration[i][j];
+                }
+            if (calibration.determinant() != 0)
+                matrix = calibration * matrix;
+            const float *a = colour.dng_levels.analogbalance;
+            matrix = Mat3::diagonal({a[0], a[1], a[2]}) * matrix;
+            if (std::abs(matrix.determinant()) > 1e-8f)
+                return matrix;
+        }
+    }
+    throw std::runtime_error("The linear DNG has no usable embedded colour matrix.");
+}
+
+// PureRAW 6 X-H2 exports with this daylight calibration retain the RAF's
+// black-subtracted, white-normalized channels. The native FLX transform
+// already characterizes those channels. Other linear DNGs can store RGB
+// in a different basis, even when they name the same camera.
+bool usesNativeXH2RGB(const libraw_data_t &d, const Mat3 &daylight)
+{
+    const std::string software = d.idata.software;
+    if (d.idata.maker_index != LIBRAW_CAMERAMAKER_Fujifilm || std::string(d.idata.model) != "X-H2"
+        || (software != "DxO PureRAW 6" && software.rfind("DxO PureRAW 6.", 0) != 0))
+        return false;
+    const Mat3 camera = Mat3::rows({1.1809f, -.5358f, -.1141f}, {-.4248f, 1.2164f, .2343f},
+                                   {-.0514f, .1097f, .5848f});
+    const Mat3 calibrated = Mat3::diagonal({.9375f, 1, 1.0122f}) * camera;
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c)
+            if (std::abs(daylight.at(r, c) - calibrated.at(r, c)) > .0001f)
+                return false;
+    return true;
+}
+
+RawMosaic unpackLinearDng(const std::string &path, const libraw_data_t &d, bool jpegXL)
+{
+    RawMosaic m;
+    m.decoder = "libraw";
+    m.make = d.idata.make;
+    m.model = d.idata.model;
+    m.width = d.sizes.raw_width;
+    m.height = d.sizes.raw_height;
+    m.cropLeft = d.sizes.left_margin;
+    m.cropTop = d.sizes.top_margin;
+    m.cropWidth = d.sizes.width;
+    m.cropHeight = d.sizes.height;
+    const auto &crop = d.sizes.raw_inset_crops[0];
+    if (crop.cwidth && crop.cheight) {
+        m.cropLeft = crop.cleft;
+        m.cropTop = crop.ctop;
+        m.cropWidth = crop.cwidth;
+        m.cropHeight = crop.cheight;
+    }
+    m.cfaSize = 0;
+    m.xyzToCamera = linearDngMatrix(d.color);
+    m.nativeCameraRGB = usesNativeXH2RGB(d, m.xyzToCamera);
+    const float *wb = d.color.cam_mul;
+    if (wb[0] > 0 && wb[1] > 0 && wb[2] > 0)
+        m.asShotNeutral = {wb[1] / wb[0], 1, wb[1] / wb[2]};
+    readMetadata(d, m);
+
+    float3 black, scale;
+    const auto &levels = d.color.dng_levels;
+    for (int c = 0; c < 3; ++c) {
+        black[c] = float(d.color.black) + float(d.color.cblack[c]);
+        const float white = float(levels.dng_whitelevel[c] ? levels.dng_whitelevel[c] : d.color.maximum);
+        if (white <= black[c])
+            throw std::runtime_error("Invalid linear DNG black or white level.");
+        scale[c] = 1 / (white - black[c]);
+    }
+    if (jpegXL) {
+        unpackJxlDngPixels(path, m, black, scale);
+        return m;
+    }
+    const auto &raw = d.rawdata;
+    const int channels = raw.color4_image ? 4 : 3;
+    const uint16_t *pixels = raw.color4_image ? raw.color4_image[0] : raw.color3_image[0];
+    const size_t stride = d.sizes.raw_pitch / sizeof(uint16_t);
+    if (stride < size_t(m.width) * channels)
+        throw std::runtime_error("Invalid linear DNG row size.");
+    m.linearRGB.resize(size_t(m.width) * m.height);
+    for (int y = 0; y < m.height; ++y) {
+        const uint16_t *p = pixels + size_t(y) * stride;
+        for (int x = 0; x < m.width; ++x, p += channels)
+            m.linearRGB[size_t(y) * m.width + x] = (float3{float(p[0]), float(p[1]), float(p[2])} - black) * scale;
+    }
+    return m;
+}
+
 } // namespace
 
 void readMetadataWithLibRaw(const std::string &path, RawMosaic &m)
 {
     auto raw = std::make_unique<LibRaw>();
     if (raw->open_file(path.c_str()) == LIBRAW_SUCCESS)
-        readMetadata(*raw, m);
+        readMetadata(raw->imgdata, m);
 }
 
 // Formats LibRaw identifies that none of the decoders here read, refused
@@ -113,10 +213,16 @@ RawMosaic unpackWithLibRaw(const std::string &path)
     auto raw = std::make_unique<LibRaw>();
     if (const int e = raw->open_file(path.c_str()); e != LIBRAW_SUCCESS)
         fail(path, libraw_strerror(e));
-    refuseUnreadable(*raw);
+    const bool linearDng = raw->imgdata.idata.dng_version && !raw->imgdata.idata.filters && raw->imgdata.idata.colors == 3;
+    if (!linearDng)
+        refuseUnreadable(*raw);
+    else if (raw->get_internal_data_pointer()->unpacker_data.tiff_compress == 52546)
+        return unpackLinearDng(path, raw->imgdata, true);
     if (const int e = raw->unpack(); e != LIBRAW_SUCCESS)
         fail(path, libraw_strerror(e));
     const libraw_data_t &d = raw->imgdata;
+    if (linearDng && (d.rawdata.color3_image || d.rawdata.color4_image))
+        return unpackLinearDng(path, d, false);
     if (!d.rawdata.raw_image)
         fail(path, "not a single-plane mosaic (LibRaw reads it, the port does not yet)");
     if (d.idata.filters == 0 || d.idata.colors != 3)
@@ -176,6 +282,6 @@ RawMosaic unpackWithLibRaw(const std::string &path)
     if (matrix == 0)
         fail(path, "LibRaw does not know the camera (" + m.make + " " + m.model + ")");
     m.asShotNeutral = {c.cam_mul[1] / std::max(c.cam_mul[0], 1e-6f), 1.0f, c.cam_mul[1] / std::max(c.cam_mul[2], 1e-6f)};
-    readMetadata(*raw, m);
+    readMetadata(raw->imgdata, m);
     return m;
 }

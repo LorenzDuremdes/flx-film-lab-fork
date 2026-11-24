@@ -84,7 +84,7 @@ AppData appData()
 // Open with) goes to the window already open.
 QString instanceName()
 {
-    return QStringLiteral("FLXFilmLab-") + qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER"));
+    return QStringLiteral("FLXFilmLabDNG-") + qEnvironmentVariable("USERNAME", qEnvironmentVariable("USER"));
 }
 
 // Hands `file` to the app already running, if there is one.
@@ -114,9 +114,9 @@ int main(int argc, char **argv)
     // apart from the Mac app's own
     QApplication::setApplicationName(QStringLiteral("FLX Film Lab Port"));
 #else
-    QApplication::setApplicationName(QStringLiteral("FLX Film Lab"));
+    QApplication::setApplicationName(QStringLiteral("FLX Film Lab DNG"));
 #endif
-    QApplication::setApplicationDisplayName(QStringLiteral("FLX Film Lab"));
+    QApplication::setApplicationDisplayName(QStringLiteral("FLX Film Lab DNG"));
     QApplication::setApplicationVersion(QStringLiteral(FLX_VERSION_TEXT));
     theme::apply(app);
 

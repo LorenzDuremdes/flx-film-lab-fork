@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 # the Mac release this port matches
-project(flx_film_lab_win VERSION 2.1.0 LANGUAGES CXX)
+project(flx_film_lab_win VERSION 2.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -85,6 +85,7 @@ endif()
 
 # RawSpeed, compiled in (cmake/RawSpeed.cmake): the standard decoder.
 include(cmake/RawSpeed.cmake)
+include(cmake/JpegXL.cmake)
 
 # The CPU side rounds as the Mac's Swift does, which fuses no multiply and add
 # into one instruction; so the Mac's build and the PC's compute alike.
@@ -148,12 +149,12 @@ set(RAW_KERNELS
     engine/shaders/raw_lanczos.comp
     engine/shaders/raw_hold.comp
 )
-qt_add_executable(flxport-decode tools/port-decode/main.cpp engine/RawUnpackRawSpeed.cpp engine/RawUnpackLibRaw.cpp
+qt_add_executable(flxport-decode tools/port-decode/main.cpp engine/RawUnpackRawSpeed.cpp engine/RawUnpackLibRaw.cpp engine/LinearDngJxl.cpp
     engine/RawDecoder.cpp engine/RawDetail.cpp engine/GpuDecoder.cpp engine/AppleColour.cpp engine/LensCorrection.cpp
     engine/Dump.cpp)
 set_target_properties(flxport-decode PROPERTIES MACOSX_BUNDLE OFF WIN32_EXECUTABLE OFF)
 target_include_directories(flxport-decode PRIVATE engine)
-target_link_libraries(flxport-decode PRIVATE Qt6::Gui Qt6::GuiPrivate flx_rawspeed flx_libraw)
+target_link_libraries(flxport-decode PRIVATE Qt6::Gui Qt6::GuiPrivate flx_rawspeed flx_libraw jxl_dec)
 flx_rounding(flxport-decode)
 qt_add_shaders(flxport-decode "flxport-decode_kernels"
     NOGLSL
@@ -254,7 +255,7 @@ set(APP_SOURCES
     app/DisplayColour.cpp
 )
 qt_add_executable(FLXFilmLab ${APP_SOURCES} ${ENGINE_SOURCES} ${MOTION_SOURCES}
-    engine/RawUnpackRawSpeed.cpp engine/RawUnpackLibRaw.cpp engine/RawDecoder.cpp engine/RawDetail.cpp
+    engine/RawUnpackRawSpeed.cpp engine/RawUnpackLibRaw.cpp engine/LinearDngJxl.cpp engine/RawDecoder.cpp engine/RawDetail.cpp
     engine/GpuDecoder.cpp engine/AppleColour.cpp engine/LensCorrection.cpp engine/AppleRendering.cpp)
 set_target_properties(FLXFilmLab PROPERTIES MACOSX_BUNDLE OFF WIN32_EXECUTABLE ON)
 # the version, for the program, Explorer and the installer (tools/pc/package.cmd)
@@ -269,7 +270,7 @@ if(WIN32)
 endif()
 target_include_directories(FLXFilmLab PRIVATE engine app)
 target_link_libraries(FLXFilmLab PRIVATE Qt6::Widgets Qt6::Gui Qt6::GuiPrivate Qt6::Network Qt6::Multimedia
-                                         flx_rawspeed flx_libraw flx_ffmpeg)
+                                         flx_rawspeed flx_libraw jxl_dec flx_ffmpeg)
 flx_rounding(FLXFilmLab)
 qt_add_shaders(FLXFilmLab "FLXFilmLab_kernels"
     NOGLSL
@@ -327,6 +328,9 @@ if(WIN32)
         endif()
         install(FILES "${source}" DESTINATION licenses RENAME "${name}")
     endfunction()
+    foreach(component jpeg-xl highway brotli lcms)
+        flx_licence("${flx_jxl_BINARY_DIR}/LICENSE.${component}" "JPEG XL - ${component}.txt")
+    endforeach()
     flx_licence(${FLX_MAC}/LICENSE "FLX Film Lab - GPL-3.0.txt")
     flx_licence(${FLX_MAC}/NOTICE.md "FLX Film Lab - notices.md")
     flx_licence(${FLX_PACKS}/LICENSE-CC-BY-SA-4.0.txt "Film packs - CC BY-SA 4.0.txt")

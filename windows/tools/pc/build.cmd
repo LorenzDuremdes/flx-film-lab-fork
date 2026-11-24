@@ -17,5 +17,5 @@ echo error: no clang-cl in Visual Studio: install its C++ Clang tools
 exit /b 1
 :clang
 if not exist "%ROOT%\build" mkdir "%ROOT%\build"
-cmake -S "%ROOT%" -B "%ROOT%\build\win" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_CXX_COMPILER=%CLANG_CL%" "-DCMAKE_PREFIX_PATH=%QT_DIR%" > "%ROOT%\build\win-configure.log" 2>&1 || (type "%ROOT%\build\win-configure.log" & exit /b 1)
+cmake -S "%ROOT%" -B "%ROOT%\build\win" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_C_COMPILER=%CLANG_CL%" "-DCMAKE_CXX_COMPILER=%CLANG_CL%" "-DCMAKE_PREFIX_PATH=%QT_DIR%" > "%ROOT%\build\win-configure.log" 2>&1 || (type "%ROOT%\build\win-configure.log" & exit /b 1)
 cmake --build "%ROOT%\build\win" || exit /b 1
