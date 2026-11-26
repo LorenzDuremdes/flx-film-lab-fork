@@ -1,11 +1,11 @@
 ; FLX Film Lab's installer for Windows (Inno Setup 7). tools\pc\package.cmd
 ; builds it from dist\FLX Film Lab once the app is installed there:
-;   ISCC /DAppVersion=2.1.0 tools\pc\installer.iss
+;   ISCC /DAppVersion=2.2.0 tools\pc\installer.iss
 ;
 ; The DNG build has its own install directory and Start menu shortcut.
 
 #ifndef AppVersion
-  #define AppVersion "2.1.0"
+  #define AppVersion "2.2.0"
 #endif
 #define AppName "FLX Film Lab DNG"
 #define AppExe "FLXFilmLab.exe"
