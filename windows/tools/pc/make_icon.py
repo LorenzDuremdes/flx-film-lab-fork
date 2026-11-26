@@ -1,9 +1,5 @@
 #!/usr/bin/env python
-"""Build the Windows app's icon (app/flx.ico) from Felix's artwork.
-
-The artwork (tools/icon/AppIcon-artwork.png in the Mac app's tree) is
-© Felix Jablonka, all rights reserved, and so is the icon made from it (the
-Mac app's NOTICE.md); it is not in the public repository.
+"""Build the Windows app's icon (app/flx.ico) from the fork's camera artwork.
 
 macOS masks an icon to its rounded square itself; Windows shows an icon as
 it is, so here the artwork is masked to that rounded square, its corners
@@ -21,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # the Mac app's tree: mac/ in the port's own repository, the parent beside
 # windows/ in the public one
 MAC = ROOT / "mac" if (ROOT / "mac" / "build.sh").exists() else ROOT.parent
-ARTWORK = MAC / "tools" / "icon" / "AppIcon-artwork.png"
+ARTWORK = MAC / "FLXFilmLab" / "Resources" / "AppIcon.icon" / "Assets" / "artwork.png"
 OUT = ROOT / "app" / "flx.ico"
 SIZES = (16, 20, 24, 32, 40, 48, 64, 96, 128, 256)
 MASTER = 1024

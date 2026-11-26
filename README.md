@@ -1505,7 +1505,7 @@ python tools/bake/build_print_profiles.py  # -> profiles/  (the motion picture p
 python tools/bake/build_instant_profiles.py  # -> profiles/  (the Polaroid instant prints)
 python tools/bake/bake_packs.py       # -> FLXFilmLab/Resources/packs
 python tools/bake/bake_reference.py   # -> tests/parity
-python tools/icon/make_icon.py        # -> FLXFilmLab/Resources/AppIcon.icns and AppIcon.icon, and the icon's two pictures
+python tools/icon/make_fork_icon.py   # -> macOS .icns, Windows .ico, and repository previews
 ```
 
 ## Layout
@@ -1547,8 +1547,7 @@ docs/          profiles.md how each profile is built, building-profiles.md the r
 
 The code is GPLv3, as spektrafilm's is (`LICENSE`). The film and paper data,
 `FLXFilmLab/Resources/packs/` and `profiles/`, is CC BY-SA 4.0, as spektrafilm's
-profiles are. This fork's exposure-step icon is GPLv3. `NOTICE.md` lists everything this
-builds on.
+profiles are. `NOTICE.md` lists everything this builds on.
 
 Film, paper, filter, camera and format names (Kodak, Fujifilm, Agfa, Ilford,
 HARMAN, Konica, Polaroid, Tiffen, Nikon, Panasonic, Apple, Canon, Sony,
