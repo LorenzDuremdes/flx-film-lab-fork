@@ -9,14 +9,20 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'windows/**'
+      - 'FLXFilmLab/Resources/**'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   mac:
-    if: github.ref_name != 'windows-pureraw-dng'
+    if: github.event_name != 'pull_request' && github.ref_name != 'windows-pureraw-dng'
     # macOS 26 and its Xcode 26, the SDK the app is developed and tested
     # with: SwiftUI behaves as the SDK an app is built with, and 1.1.0, built
     # on macOS 15 with its SDK, lost the sliders' double-click reset. Named,
@@ -157,8 +163,13 @@ jobs:
             }
           }
 
-      - name: Test Windows linear DNG imports at full and preview size
-        if: github.ref_name == 'windows-pureraw-dng'
+      - name: Run Windows port regression checks
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Qt\6.12.0\msvc2022_64\bin;$env:PATH"
+          windows/build/win/flxport-checks.exe --packs FLXFilmLab/Resources/packs
+
+      - name: Test Windows linear DNG imports and packaged TIFF exports
         shell: pwsh
         run: |
           $env:PATH = "C:\Qt\6.12.0\msvc2022_64\bin;$env:PATH"
@@ -183,6 +194,8 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
     needs: [mac, windows]
     runs-on: ubuntu-latest
     steps:

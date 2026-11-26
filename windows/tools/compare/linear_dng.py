@@ -53,12 +53,18 @@ def check(decoder, folder, app):
         assert preview.shape == (44, 28, 3) and np.isfinite(preview).all()
 
         if app:
-            print_path = source.with_suffix(".tif")
-            subprocess.run([app, source, "--export", print_path], check=True, timeout=180)
+            album = folder / "Étude"
+            album.mkdir(exist_ok=True)
+            app_source = source.rename(album / source.name)
+            print_path = app_source.with_suffix(".tif")
+            subprocess.run([app, app_source, "--library", folder / "library", "--export", print_path],
+                           check=True, timeout=180)
             with tifffile.TiffFile(print_path) as result:
                 page = result.pages[0]
                 assert (page.imagewidth, page.imagelength) == (56, 88)
                 assert page.bitspersample == 16 and page.samplesperpixel >= 3
+                assert page.tags["Orientation"].value == 1
+                assert "Edited with FLX Film Lab." in page.description
                 assert np.ptp(page.asarray()[:, :, :3]) > 0
 
 
